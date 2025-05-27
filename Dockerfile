@@ -1,4 +1,4 @@
-# docker build -t mparang/cert-exporter:latest .
+# docker build --rm --no-cache -t mparang/cert-exporter:latest .
 
 # builder
 FROM mcr.microsoft.com/dotnet/sdk:6.0 AS build-env

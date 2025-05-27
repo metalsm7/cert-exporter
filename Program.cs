@@ -1,5 +1,6 @@
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
+using System.Text.RegularExpressions;
 using CertExporter;
 using Com.Mparang.AZLib;
 using CommandLine;
@@ -77,20 +78,16 @@ app.MapGet("/metrics", async (HttpContext context) => {
                 // # HELP node_cpu_seconds_total Seconds the cpus spent in each mode.
                 // # TYPE node_cpu_seconds_total counter
                 // node_cpu_seconds_total{cpu="0",mode="idle"} 8.71366944e+07
-                try {
-                    rtnVal.Append(
-                        new StringBuilder()
-                            .Append($"# HELP cert_expires_in Seconds certificate expires{Environment.NewLine}")
-                            .Append($"# TYPE cert_expires_in counter{Environment.NewLine}")
-                            .Append(
-                                $"cert_expires_in{{domain=\"{req.RequestUri?.Host}{((req.RequestUri?.Port == 443) ? "" : $":{req.RequestUri?.Port}")}\",subject=\"{x509.Subject.Replace("CN=", "")}\",issuer=\"{x509.Issuer}\"}} {(Math.Floor(x509.NotAfter.Subtract(DateTime.UnixEpoch).TotalSeconds - DateTime.Now.Subtract(DateTime.UnixEpoch).TotalSeconds))}{Environment.NewLine}"
-                            )
-                            .ToString()
-                    );
-                }
-                catch (Exception ex) {
-                    Console.WriteLine(ex);
-                }
+                // Console.WriteLine($"Proc {req.RequestUri?.Host}{((req.RequestUri?.Port == 443) ? "" : $":{req.RequestUri?.Port}")} - certificate:{certificate}");
+                rtnVal.Append(
+                    new StringBuilder()
+                        .Append($"# HELP cert_expires_in Seconds certificate expires{Environment.NewLine}")
+                        .Append($"# TYPE cert_expires_in counter{Environment.NewLine}")
+                        .Append(
+                            $"cert_expires_in{{domain=\"{req.RequestUri?.Host}{((req.RequestUri?.Port == 443) ? "" : $":{req.RequestUri?.Port}")}\",subject=\"{x509.Subject.Replace("CN=", "")}\",issuer=\"{x509.Issuer}\"}} {(Math.Floor(x509.NotAfter.Subtract(DateTime.UnixEpoch).TotalSeconds - DateTime.Now.Subtract(DateTime.UnixEpoch).TotalSeconds))}{Environment.NewLine}"
+                        )
+                        .ToString()
+                );
 
                 //
                 return true;
@@ -99,7 +96,33 @@ app.MapGet("/metrics", async (HttpContext context) => {
     //
     var tasks = new List<Task>();
     foreach (var domain in domains) {
-        tasks.Add(client.SendAsync(new HttpRequestMessage(HttpMethod.Get, new Uri($"https://{domain}"))));
+        try
+        {
+            tasks.Add(
+                client.SendAsync(new HttpRequestMessage(HttpMethod.Get, new Uri($"https://{domain}")))
+                    .ContinueWith(
+                        result => {
+                            if (result.Exception != null) {
+                                Console.Error.WriteLine($"Error domain: {domain} - message:{result.Exception.Message}");
+                                //
+                                rtnVal.Append(
+                                    new StringBuilder()
+                                        .Append($"# HELP cert_expires_in Seconds certificate expires{Environment.NewLine}")
+                                        .Append($"# TYPE cert_expires_in counter{Environment.NewLine}")
+                                        .Append(
+                                            $"cert_expires_in{{domain=\"{domain}\",subject=\"\",issuer=\"\"}} 0{Environment.NewLine}"
+                                        )
+                                        .ToString()
+                                );
+                            }
+                        }
+                    )
+            );
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($" - {domain} / {ex}");
+        }
     }
     await Task.WhenAll(tasks);
     //
@@ -139,7 +162,29 @@ app.MapGet("/metrics/json", async (HttpContext context) => {
     //
     var tasks = new List<Task>();
     foreach (var domain in domains) {
-        tasks.Add(client.SendAsync(new HttpRequestMessage(HttpMethod.Get, new Uri($"https://{domain}"))));
+        tasks.Add(
+            client.SendAsync(
+                new HttpRequestMessage(HttpMethod.Get, new Uri($"https://{domain}"))
+            )
+            .ContinueWith(
+                result => {
+                    if (result.Exception != null) {
+                        Console.Error.WriteLine($"Error domain: {domain} - message:{result.Exception.Message}");
+                        //
+                        list.Add(
+                            new AZData()
+                                .Add("Url", $"https://{domain}")
+                                .Add("Domain", Regex.Replace(domain, ":[0-9]+$", ""))
+                                .Add("Subject", "")
+                                .Add("Issuer", "")
+                                .Add("NotBefore", 0)
+                                .Add("NotAfter", 0)
+                                .Add("RemainSeconds", 0)
+                        );
+                    }
+                }
+            )
+        );
     }
     await Task.WhenAll(tasks);
     //
@@ -149,3 +194,40 @@ app.MapGet("/metrics/json", async (HttpContext context) => {
 // app.MapControllers();
 
 app.Run();
+
+
+// curl -v https://kpopfile.codewiz.kr
+// curl -v https://img.kpoplive.net
+// curl -v https://www.goldlive.co.kr
+// curl -v https://www.jjinlive.com
+// curl -v https://pangload.codewiz.kr:8091
+// curl -v https://kpopload.codewiz.kr:8004
+// curl -v https://pangchat1.codewiz.kr:8091
+// curl -v https://kpopchat1.codewiz.kr:8004
+// curl -v https://pangchat2.codewiz.kr:8091
+// curl -v https://kpopchat2.codewiz.kr:8004
+// curl -v https://live0.goldlive.co.kr
+// curl -v https://live1.goldlive.co.kr
+// curl -v https://live2.goldlive.co.kr
+// curl -v https://live3.goldlive.co.kr
+// curl -v https://live0.kpoplive.net
+// curl -v https://uno-www.codewiz.kr
+// curl -v https://uno-app.codewiz.kr
+// curl -v https://kpoplive.www.codewiz.kr
+// curl -v https://st1.codewiz.kr:8091
+// curl -v https://st1.codewiz.kr:8004
+// curl -v https://st2.codewiz.kr:8004
+// curl -v https://st3.codewiz.kr:8004
+// curl -v https://gitlab.codewiz.kr
+// curl -v https://bbidc.codewiz.kr
+// curl -v https://kpopvod.codewiz.kr
+// curl -v https://pangvod.codewiz.kr
+// curl -v https://unofile.codewiz.kr
+// curl -v https://wapp.codewiz.kr
+// curl -v https://api.zchat.codewiz.kr
+// curl -v https://broadcast.pangpangtv.co.kr:8091
+// curl -v https://papi.pangpangtv.co.kr
+// curl -v https://img.kpoprnx.com
+// curl -v https://www.kpoprnx.com
+// curl -v https://message.codewiz.kr
+// curl -v https://noti.codewiz.kr
