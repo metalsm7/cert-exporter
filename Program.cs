@@ -193,6 +193,16 @@ app.MapGet("/metrics/json", async (HttpContext context) => {
 
 // app.MapControllers();
 
+//
+app.Lifetime.ApplicationStarted.Register(() => {
+    Console.WriteLine(@" _____         _   _____                 _           
+|     |___ ___| |_|   __|_ _ ___ ___ ___| |_ ___ ___ 
+|   --| -_|  _|  _|   __|_'_| . | . |  _|  _| -_|  _|
+|_____|___|_| |_| |_____|_,_|  _|___|_| |_| |___|_|  
+                            |_|       ");
+});
+
+//
 app.Run();
 
 
@@ -231,3 +241,4 @@ app.Run();
 // curl -v https://www.kpoprnx.com
 // curl -v https://message.codewiz.kr
 // curl -v https://noti.codewiz.kr
+
